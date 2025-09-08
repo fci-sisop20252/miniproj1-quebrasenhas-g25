@@ -67,6 +67,10 @@ int main(int argc, char *argv[]) {
     // Se não, imprimir mensagem de uso e sair com código 1
     
     // IMPLEMENTE AQUI: verificação de argc e mensagem de erro
+      if (argc != 5) {
+        fprintf(stderr, "Uso: %s <hash_md5> <tamanho> <charset> <num_workers>\n", argv[0]);
+        return 1;
+    }
     
     // Parsing dos argumentos (após validação)
     const char *target_hash = argv[1];
@@ -79,6 +83,19 @@ int main(int argc, char *argv[]) {
     // - password_len deve estar entre 1 e 10
     // - num_workers deve estar entre 1 e MAX_WORKERS
     // - charset não pode ser vazio
+
+    if (password_len < 1 || password_len > 10) {
+        fprintf(stderr, "Erro: tamanho da senha deve estar entre 1 e 10\n");
+        return 1;
+    }
+    if (num_workers < 1 || num_workers > MAX_WORKERS) {
+        fprintf(stderr, "Erro: numero de workers deve estar entre 1 e %d\n", MAX_WORKERS);
+        return 1;
+    }
+    if (charset_len == 0) {
+        fprintf(stderr, "Erro: charset não pode ser vazio\n");
+        return 1;
+    }
     
     printf("=== Mini-Projeto 1: Quebra de Senhas Paralelo ===\n");
     printf("Hash MD5 alvo: %s\n", target_hash);
@@ -101,6 +118,8 @@ int main(int argc, char *argv[]) {
     // DICA: Use divisão inteira e distribua o resto entre os primeiros workers
     
     // IMPLEMENTE AQUI:
+    long long passwords_per_worker = total_space / num_workers;
+    long long remaining = total_space % num_workers;
     // long long passwords_per_worker = ?
     // long long remaining = ?
     
@@ -112,6 +131,28 @@ int main(int argc, char *argv[]) {
     
     // IMPLEMENTE AQUI: Loop para criar workers
     for (int i = 0; i < num_workers; i++) {
+        long long start_index = i * passwords_per_worker + (i < remaining ? i : remaining);
+        long long end_index = start_index + passwords_per_worker - 1;
+        if (i < remaining) end_index++;
+        
+        // TODO: Converter indices para senhas de inicio e fim
+        char start_password[password_len + 1];
+        char end_password[password_len + 1];
+        index_to_password(start_index, charset, charset_len, password_len, start_password);
+        index_to_password(end_index, charset, charset_len, password_len, end_password);
+        pid_t pid = fork();
+        if (pid < 0) {
+            perror("Erro no fork");
+            return 1;
+        } else if (pid == 0) {
+            execl("./worker", "worker", target_hash, start_password, end_password, charset, argv[2], argv[4], (char *)NULL);
+            perror("Erro ao executar worker");
+            exit(1);
+        } else {
+            workers[i] = pid;
+            printf("Worker %d iniciado (PID %d) - intervalo: %s a %s\n", i, pid, start_password, end_password);
+        }
+    }
         // TODO: Calcular intervalo de senhas para este worker
         // TODO: Converter indices para senhas de inicio e fim
         // TODO 4: Usar fork() para criar processo filho
@@ -126,6 +167,19 @@ int main(int argc, char *argv[]) {
     // IMPORTANTE: O pai deve aguardar TODOS os filhos para evitar zumbis
     
     // IMPLEMENTE AQUI:
+    int workers_finished = 0;
+    while (workers_finished < num_workers) {
+        int status;
+        pid_t finished_pid = wait(&status);
+        if (finished_pid > 0) {
+            workers_finished++;
+            if (WIFEXITED(status)) {
+                printf("Worker PID %d terminou com código %d\n", finished_pid, WEXITSTATUS(status));
+            } else {
+                printf("Worker PID %d terminou de forma anormal\n", finished_pid);
+            }
+        }
+    }
     // - Loop para aguardar cada worker terminar
     // - Usar wait() para capturar status de saída
     // - Identificar qual worker terminou
@@ -142,6 +196,32 @@ int main(int argc, char *argv[]) {
     // Ler o arquivo password_found.txt se existir
     
     // IMPLEMENTE AQUI:
+    int fd = open(RESULT_FILE, O_RDONLY);
+    if (fd >= 0) {
+        char buffer[256];
+        int n = read(fd, buffer, sizeof(buffer)-1);
+        if (n > 0) {
+            buffer[n] = '\0';
+            char *sep = strchr(buffer, ':');
+            if (sep) {
+                char *found_password = sep + 1;
+                found_password[strcspn(found_password, "\n")] = '\0';
+                
+                char hash_check[33];
+                md5_string(found_password, hash_check);
+                if (strcmp(hash_check, target_hash) == 0) {
+                    printf("Senha encontrada: %s\n", found_password);
+                    printf("Tempo total: %.2f segundos\n", elapsed_time);
+                } else {
+                    printf("Erro: hash da senha encontrada não confere\n");
+                }
+            }
+        }
+        close(fd);
+    } else {
+        printf("Nenhum worker encontrou a senha.\n");
+    }
+    
     // - Abrir arquivo RESULT_FILE para leitura
     // - Ler conteúdo do arquivo
     // - Fazer parse do formato "worker_id:password"
