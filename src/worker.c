@@ -33,12 +33,27 @@
  */
 int increment_password(char *password, const char *charset, int charset_len, int password_len) {
     
+    
     // TODO 1: Implementar o algoritmo de incremento de senha
     // OBJETIVO: Incrementar senha como um contador (ex: aaa -> aab -> aac -> aad...)
     // DICA: Começar do último caractere, como somar 1 em um número
     // DICA: Se um caractere "estoura", volta ao primeiro e incrementa o caracter a esquerda (aay -> aaz -> aba)
     
     // IMPLEMENTE AQUI:
+    int increment_password(char *password, const char *charset, int charset_len, int password_len) {
+    for (int i = password_len - 1; i >= 0; i--) {
+        // Encontrar índice do caractere atual no charset
+        int pos = 0;
+        while (pos < charset_len && charset[pos] != password[i]) pos++;
+        if (pos == charset_len - 1) {
+            // Overflow nesta posição
+            password[i] = charset[0];
+        } else {
+            // Incrementar e retornar
+            password[i] = charset[pos + 1];
+            return 1;
+        }
+    }
     // - Percorrer password de trás para frente
     // - Para cada posição, encontrar índice atual no charset
     // - Incrementar índice
@@ -77,6 +92,13 @@ void save_result(int worker_id, const char *password) {
     // FORMATO DO ARQUIVO: "worker_id:password\n"
     
     // IMPLEMENTE AQUI:
+    int fd = open(RESULT_FILE, O_CREAT | O_EXCL | O_WRONLY, 0644);
+    if (fd >= 0) {
+        char buffer[128];
+        int n = snprintf(buffer, sizeof(buffer), "%d:%s\n", worker_id, password);
+        write(fd, buffer, n);
+        close(fd);
+    }
     // - Tentar abrir arquivo com O_CREAT | O_EXCL | O_WRONLY
     // - Se sucesso: escrever resultado e fechar
     // - Se falhou: outro worker já encontrou
@@ -117,6 +139,23 @@ int main(int argc, char *argv[]) {
     
     // Loop principal de verificação
     while (1) {
+        if (passwords_checked % PROGRESS_INTERVAL == 0 && check_result_exists()) {
+            printf("[Worker %d] Outro worker encontrou a senha. Encerrando.\n", worker_id);
+            break;
+        }
+        md5_string(current_password, computed_hash);
+        if (strcmp(computed_hash, target_hash) == 0) {
+            save_result(worker_id, current_password);
+            printf("[Worker %d] Senha encontrada: %s\n", worker_id, current_password);
+            break;
+        }
+         if (!increment_password(current_password, charset, charset_len, password_len)) {
+              break;
+        }
+         if (password_compare(current_password, end_password) > 0) {
+            break;
+        }
+
         // TODO 3: Verificar periodicamente se outro worker já encontrou a senha
         // DICA: A cada PROGRESS_INTERVAL senhas, verificar se arquivo resultado existe
         
