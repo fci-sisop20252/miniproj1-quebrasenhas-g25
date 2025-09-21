@@ -1,6 +1,6 @@
 # Relatório: Mini-Projeto 1 - Quebra-Senhas Paralelo
 
-**Aluno(s):** Nome (Matrícula), Nome (Matrícula),,,  
+**Aluno(s):** Nome (David Rodrigues de Oliveira), Nome (10410867),,,  
 ---
 
 ## 1. Estratégia de Paralelização
